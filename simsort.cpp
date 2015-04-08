@@ -1,13 +1,33 @@
-#include <stdio.h>
-//#include <emmintrin.h>
-#include <pmmintrin.h>
+#include <vector>
+#include <iostream>
 #include <smmintrin.h>
-#include <cstdint>
+#include <fstream>
+#include <ostream>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string>
+#include <algorithm>
+#include <iterator>
+#include <functional>
+#include <stdlib.h> 
 
-// gcc -msse3 -msse4 simsort.cpp -std=c++11
+// g++ -msse3 -msse4 simsort.cpp -std=c++11
+// Gprof: g++ -pg -msse3 -msse4 simsort.cpp -std=c++11
+//        gprof -p a.out gmon.out > analysis.txt
 
-void printf_register(int32_t* R){
-	printf("(%i, %i, %i, %i)\n", R[0], R[1], R[2], R[3]);
+using namespace std;
+
+void printf_register(vector<float> R){
+	cout << "(";
+	for (std::vector<float>::iterator i = R.begin(); i != R.end(); ++i)
+	{
+		cout << " " << *i;
+	}
+	cout << ")\n";
+}
+
+void printf_debug(__m128 R){
+	printf("(%5.3f, %5.3f, %5.3f, %5.3f)\n", R[0], R[1], R[2], R[3]);
 }
 
 // Intercambia los valores intermedios del arreglo
@@ -18,6 +38,16 @@ __m128 swapMiddle(__m128 R){
 // Intercambia los valores intermedios entre dos arreglos
 __m128 dobleSwapMiddle(__m128 R1, __m128 R2){
 	return _mm_shuffle_ps(R1, R2, _MM_SHUFFLE(3, 1, 2, 0));
+}
+
+// Invierte el orden de un registro
+__m128 invertir(__m128 R){
+	return _mm_shuffle_ps(R, R, _MM_SHUFFLE(0, 1, 2, 3));
+}
+
+// Entrega un registro que tiene el primer digito repetido en todas sus posiciones
+__m128 primeroRepetido(__m128 R){
+	return _mm_shuffle_ps(R, R, _MM_SHUFFLE(0, 0, 0, 0));
 }
 
 // Realiza el paso intermedio de una red minmax
@@ -43,39 +73,47 @@ __m128 minmaxNetwork(__m128 R){
 	return R;
 }
 
+// Compara dos registros dejando los valores menores menores en R1 y los mayores en R2
+// comparano por columna
+void compara2R(__m128& R1, __m128 &R2){
+	__m128 aux1, aux2;
+	__m128 comp;
+
+	// Compara el primer registro con el segundo
+	comp = _mm_cmplt_ps(R1, R2);
+	// Obtiene el menor
+	aux1 = _mm_blendv_ps(R2, R1, comp);
+	// Obtiene el mayor
+	aux2 = _mm_blendv_ps(R1, R2, comp);
+
+	R1 = aux1;
+	R2 = aux2;
+}
+
+// Realiza una MinMax Network entre cuatro registros en ves de cuatro números de un solo registro
+__m128 minmaxNetwork_R(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
+
+	// Compara el primero con el tercero
+	compara2R(Af, Cf);
+	// Compara el segundo con el cuarto
+	compara2R(Bf, Df);
+	// compara el primero con el segundo
+	compara2R(Af, Bf);
+	// compara el tercero con el cuarto
+	compara2R(Cf, Df);
+	// Compara el segundo con el tercer
+	compara2R(Bf, Cf);
+}
+
 void ordenamientoInRegister(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
-	__m128 Pista1, Pista1_aux1, Pista1_aux2;
-	__m128 Pista2, Pista2_aux1, Pista2_aux2;
-	__m128 Pista3, Pista3_aux1, Pista3_aux2;
-	__m128 Pista4, Pista4_aux1, Pista4_aux2;
 
-	// Generar pistas
-	Pista1_aux1 = _mm_shuffle_ps(Af, Cf, _MM_SHUFFLE(1, 0, 1, 0));
-	Pista1_aux2 = _mm_shuffle_ps(Bf, Df, _MM_SHUFFLE(0, 1, 0, 1));
-	Pista1 = dobleSwapMiddle(Pista1_aux1, Pista1_aux2);
-	Pista1 = swapMiddle(Pista1);
+	// MinMax entre los cuatro registros
+	// Quedan ordenados por columa
+	minmaxNetwork_R(Af, Bf, Cf, Df);
 
-	Pista2_aux1 = _mm_shuffle_ps(Af, Cf, _MM_SHUFFLE(1, 1, 1, 1));
-	Pista2_aux2 = _mm_shuffle_ps(Bf, Df, _MM_SHUFFLE(1, 1, 1, 1));
-	Pista2 = dobleSwapMiddle(Pista2_aux1, Pista2_aux2);
-	Pista2 = swapMiddle(Pista2);
-
-	Pista3_aux1 = _mm_shuffle_ps(Af, Cf, _MM_SHUFFLE(1, 2, 1, 2));
-	Pista3_aux2 = _mm_shuffle_ps(Bf, Df, _MM_SHUFFLE(2, 1, 2, 1));
-	Pista3 = dobleSwapMiddle(Pista3_aux1, Pista3_aux2);
-	Pista3 = swapMiddle(Pista3);
-
-	Pista4_aux1 = _mm_shuffle_ps(Af, Cf, _MM_SHUFFLE(1, 3, 1, 3));
-	Pista4_aux2 = _mm_shuffle_ps(Bf, Df, _MM_SHUFFLE(3, 1, 3, 1));
-	Pista4 = dobleSwapMiddle(Pista4_aux1, Pista4_aux2);
-	Pista4 = swapMiddle(Pista4);
-
-	// MINMAX NETOWRK
-	// Ordena los registros usando una red minmax
-	Af = minmaxNetwork(Pista1);
-	Bf = minmaxNetwork(Pista2);
-	Cf = minmaxNetwork(Pista3);
-	Df = minmaxNetwork(Pista4);
+	// Redshuffle
+	// La primera columna ahora es la primera fila y así con cada columna
+	_MM_TRANSPOSE4_PS(Af, Bf, Cf, Df);
 }
 
 // Ejecuta una Bionic Merge Network
@@ -110,16 +148,6 @@ void BMN(__m128& Af, __m128& Bf){
 	Bf = swapMiddle(Bf_bmn);	
 }
 
-// Invierte el orden de un registro
-__m128 invertir(__m128 R){
-	return _mm_shuffle_ps(R, R, _MM_SHUFFLE(0, 1, 2, 3));
-}
-
-// Entrega un registro que tiene el primer digito repetido en todas sus posiciones
-__m128 primeroRepetido(__m128 R){
-	return _mm_shuffle_ps(R, R, _MM_SHUFFLE(0, 0, 0, 0));
-}
-
 // Ejecuta mergeSIMD sobre cuatro arreglos (16 números)
 void mergeSIMD(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	__m128 O1, O2, O2_menor, O2_mayor;
@@ -128,6 +156,8 @@ void mergeSIMD(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	// Se cargan Af y Cf en una BMN (invirtiendo Cf) para obtener dos registros O1 y O2
 	O1 = Af;
 	O2 = Cf;
+	O2_menor = Bf;
+	O2_mayor = Df;
 
 	// Compara los dos arreglos restantes para obtener el menor y el mayor
 	comp = _mm_cmplt_ps(primeroRepetido(Bf), primeroRepetido(Df));
@@ -158,30 +188,15 @@ void mergeSIMD(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	Df = O2;
 }
 
-int main(){
-	__m128i A, B, C, D;
+void SIMD_Part(float* a, float* b, float* c, float* d){
 	__m128 Af, Bf, Cf, Df;
 
-	//INPUT
-	// TODO: leer de un archivo binario
-	// Arreglos de prueba alineados a 16 bytes
-	int32_t a[4] __attribute__((aligned(16))) = { 12, 21, 4, 13} ;
-	int32_t b[4] __attribute__((aligned(16))) = { 9, 8, 6, 7 };
-	int32_t c[4] __attribute__((aligned(16))) = { 1, 14, 3, 0 };
-	int32_t d[4] __attribute__((aligned(16))) = { 5, 11, 15, 10 };
-
-	// Carga los registros
-	A = _mm_set_epi32(a[3], a[2], a[1], a[0]);
-	B = _mm_set_epi32(b[3], b[2], b[1], b[0]);
-	C = _mm_set_epi32(c[3], c[2], c[1], c[0]);
-	D = _mm_set_epi32(d[3], d[2], d[1], d[0]);
-
-
 	// Los pasa a registros de punto flotante
-	Af = _mm_castsi128_ps(A);
-	Bf = _mm_castsi128_ps(B);
-	Cf = _mm_castsi128_ps(C);
-	Df = _mm_castsi128_ps(D);
+	Af = _mm_load_ps(a);
+	Bf = _mm_load_ps(b);
+	Cf = _mm_load_ps(c);
+	Df = _mm_load_ps(d);
+
 
 	// IN-REGISTER
 	// Se alteran los valores de Af, Bf, Cf y Df al pasar el valor como referencia
@@ -193,38 +208,297 @@ int main(){
 
 	// BMN
 	// Se alteran los valores de Af y Bf, Cf y Df al pasar el valor como referencia
-	BMN(Af, Bf);	
-	BMN(Cf, Df);	
+	BMN(Af, Bf);
+	BMN(Cf, Df);
 
 	// Merge SIMD
 	// Se alteran los valores de Af, Bf, Cf y Df al pasar el valor como referencia
 	mergeSIMD(Af,Bf,Cf,Df);
 
-
-	// MultiWay Merge Sort
-	// No usa SIMD
-	// Buscar el menor de todas las listas (de 16) comparando el primer número
-	// Se saca este valor final y se agrega a la lista final (output)
-	// Repetir hasta vaciar todas las listas
-
-
-	//OUTPUT
-	// Pasa los registros a enteros
-	A = _mm_castps_si128(Af);
-	B = _mm_castps_si128(Bf);
-	C = _mm_castps_si128(Cf);
-	D = _mm_castps_si128(Df);
-
 	// Guarda los registros
-	_mm_store_si128((__m128i*)&a, A);
-	_mm_store_si128((__m128i*)&b, B);
-	_mm_store_si128((__m128i*)&c, C);
-	_mm_store_si128((__m128i*)&d, D);
-
-	// Imprime los registros en consola
-	printf_register(a);
-	printf_register(b);
-	printf_register(c);
-	printf_register(d);
+	_mm_store_ps(a, Af);
+	_mm_store_ps(b, Bf);
+	_mm_store_ps(c, Cf);
+	_mm_store_ps(d, Df);
 }
 
+vector<float> float16(float* a, float* b, float* c, float* d){
+	vector<float> v;
+
+	for(int i=0; i < 16 ; i++){
+		if(i<4){
+			v.push_back(a[i]);
+		}else if(i>=4 && i<8){
+			v.push_back(b[i%4]);
+		}else if(i>=8 && i<12){
+			v.push_back(c[i%4]);
+		}else if(i>=12 && i<16){
+			v.push_back(d[i%4]);
+		}
+	}
+
+	return v;
+}
+
+void Push(vector<float>& heap, float val) {
+    heap.push_back(val);
+    push_heap(heap.begin(), heap.end(), greater<float>());
+}
+
+float Pop(vector<float>& heap) {
+    float val = heap.front();
+     
+    //This operation will move the smallest element to the end of the vector
+    pop_heap(heap.begin(), heap.end(), greater<float>());
+ 
+    //Remove the last element from vector, which is the smallest element
+    heap.pop_back();
+
+
+    return val;
+}
+
+vector<float> mwms(vector<vector<float>> secuencias){
+	vector<float> output;
+	/*float menor = 0;
+	int vector_id = 0;
+
+	while(!secuencias.empty()){	
+		
+		menor = secuencias[0][0];
+		
+		for (int i = 0; i < secuencias.size(); i++)
+		{
+
+			if(!secuencias[i].empty()){
+				vector<float> aux_v = secuencias[i];
+
+				if (menor >= aux_v[0])
+				{
+					menor = aux_v[0];
+					vector_id = i;
+				}
+			}else{				
+				secuencias.erase(secuencias.begin()+i);
+			}
+		}
+
+		output.push_back(menor);
+		secuencias[vector_id].erase(secuencias[vector_id].begin());
+		if(secuencias[vector_id].empty()){
+			secuencias.erase(secuencias.begin()+vector_id);
+		}
+	}*/
+
+	vector<float> minHeap;
+	for (int j = 0; j < secuencias.size(); j++){
+		for (int i = 0; i < secuencias[j].size(); i++)
+		{
+			Push(minHeap, secuencias[j][i]);
+		}
+	}
+
+	while(!minHeap.empty()){
+		output.push_back(Pop(minHeap));
+	}
+
+
+	return output;
+}
+
+
+
+
+
+
+
+
+
+
+
+int main(int argc, char *argv[]){
+	/* Arreglo de números */
+	// Vector que guarda cada secuencia ordenada por separado
+	vector<vector<float>> secuencias;
+	// Guarda la secuencia completa de los números ordenados
+	vector<float> output;
+	/* File I/O */
+	// Guarda el tamaño total del archivo leído
+	streampos size;
+	// largo: el largo total de números flotantes del archivo
+	// veces: número de veces que se cargaran 16 flotantes y que se ejecutará
+	// toda la secuencia SIMD completa
+	int largo,veces;
+	// Arreglo que guarda en memoria el archivo leído en completo
+	// Esto disminuye la cantidad de I/O necesarios para ordenar el archivo de entrada
+	float * memblock;
+	// Referencia al archivo de salida
+	int file_output;
+	/* Command lines */
+	string input_name;
+	string output_name = "output.raw";
+	string command_i = "-i";
+	string command_o = "-o";
+	string command_N = "-N";
+	string command_d = "-d";
+	string command_h = "-h";
+	int num_elementos = 0;
+	int debug = 0;
+
+	/* Analisis de los parametros de entrada */
+	for (int i = 1; i < argc; i++){
+		if(command_h.compare(argv[i]) == 0){
+			cout << endl;
+			cout << "Este programa tiene 5 parametros de entrada, de los cuales" << endl;
+			cout << "uno es obligatorio, si el resto no se especifica se usarán valores por defecto." << endl;
+			cout << endl;
+			cout << "Comando |  Argumento                 |  Valor por defecto  " << endl;
+			cout << "  -i    |  nombre archivo de entrada |                     " << endl;
+			cout << "  -o    |  nombre archivo de salida  |  output.raw         " << endl;
+			cout << "  -N    |  largo de la lista         |  largo total de -i  " << endl;
+			cout << "  -d    |  1 o 0                     |  0                  " << endl;
+			cout << "  -h    |                            |                     " << endl;
+			cout << endl;
+			cout << "Comando |  Descripción                                                          " << endl;
+			cout << "  -i    |  Permite identificar el archivo de entrada.                           " << endl;
+			cout << "        |  Debe ser un archivo binario de extension *.raw                       " << endl;
+			cout << "  -o    |  Permite darle un nombre al archivo de salida                         " << endl;
+			cout << "        |  Debe ser de extension *.raw                                          " << endl;
+			cout << "  -N    |  Determina cuantos números hay en el archivo de entrada               " << endl;
+			cout << "  -d    |  Activa o desactiva el modo debug.                                    " << endl;
+			cout << "        |  0: No existira ningún feedback del comportamiento de la aplicación   " << endl;
+			cout << "        |  1: Se imprimirá la secuencia final ordenada, un elemento por línea.  " << endl;
+			cout << "  -h    |  Activa esta ventana de ayuda                                         " << endl;
+			cout << endl;
+			return -2;
+		}
+	}
+
+	if(argc <= 2){
+		cout << endl;
+		cout << "Debe especificar almenos el archivo de entrada con '-i nombrearchivo.raw'" << endl;
+		cout << "Para más ayuda use '-h'" << endl;
+		cout << endl;
+		return -1;
+	}else if(argc%2 == 0){
+		cout << endl;
+		cout << "Todo comando debe tener un argumento, si el comando no es escrito se usarán los valores por defecto" << endl;
+		cout << "Para más ayuda use '-h'" << endl;
+		cout << endl;
+		return -1;
+	}else{
+		for (int i = 1; i < argc; i++)
+		{
+			if(command_i.compare(argv[i]) == 0){
+				input_name = argv[i+1];
+				if(input_name.find(".raw") == string::npos){
+					cout << endl;
+					cout << "El parametro -i debe contener un archivo de extensión *.raw" << endl;
+					cout << "Para más ayuda use '-h'" << endl;
+					cout << endl;
+					return -1;
+				}
+			}else if(command_o.compare(argv[i]) == 0){
+				output_name = argv[i+1];
+				if(output_name.find(".raw") == string::npos){
+					cout << endl;
+					cout << "El parametro -i debe contener un nombre de extensión *.raw" << endl;
+					cout << "Para más ayuda use '-h'" << endl;
+					cout << endl;
+					return -1;
+				}
+			}else if(command_N.compare(argv[i]) == 0){
+				num_elementos = atoi(argv[i+1]);
+				if(num_elementos <= 0){
+					cout << endl;
+					cout << "El parametro '-n' debe ser mayor o igual a 1." << endl;
+					cout << "Para más ayuda use '-h'" << endl;
+					cout << endl;
+					return -1;
+				}else if(num_elementos != 1 && num_elementos != 2 && num_elementos != 4 && num_elementos != 8){
+					if(num_elementos%16 != 0){
+						cout << endl;
+						cout << "El parametro '-n' debe ser potencia de 2." << endl;
+						cout << "Para más ayuda use '-h'" << endl;
+						cout << endl;
+						return -1;
+					}
+				}
+			}else if(command_d.compare(argv[i]) == 0){
+				debug = atoi(argv[i+1]);
+				if(debug > 1 || debug < 0){
+					cout << endl;
+					cout << "El parametro de '-d' debe ser 0 o 1." << endl;
+					cout << "Para más ayuda use '-h'" << endl;
+					cout << endl;
+					return -1;
+				}
+			}
+			i++;
+		}		
+	}
+
+	/* Reading */
+	ifstream input(input_name.c_str(), ios::in|ios::binary|ios::ate);
+	if(input.is_open()){
+		size = input.tellg();
+	    memblock = new float[size];
+	    input.seekg (0, ios::beg);
+	    input.read ((char *)memblock, size);
+	    input.close();
+	}else{
+		cout << endl;
+		cout << "No ha sido posible abrir el archivo" << endl;
+		cout << "Para más ayuda use '-h'" << endl;
+		cout << endl;
+		return -1;
+	}
+
+	if(num_elementos == 0){
+		largo = (int)size/4;
+	}else{
+		largo = num_elementos;
+	}
+	veces = largo/16;	
+
+	float a[4] __attribute__((aligned(16)));
+	float b[4] __attribute__((aligned(16)));
+	float c[4] __attribute__((aligned(16)));
+	float d[4] __attribute__((aligned(16)));
+
+	for (int i = 0; i < veces; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			a[j] = memblock[j+0 + i*(16)];
+			b[j] = memblock[j+4 + i*(16)];
+			c[j] = memblock[j+8 + i*(16)];
+			d[j] = memblock[j+12 + i*(16)];
+		}
+
+		// Ordena a nivel de procesador
+		SIMD_Part(a, b, c, d);
+
+		// Se añade el resultado
+		secuencias.push_back(float16(a, b, c, d));
+	}	
+
+	// MultiWay Merge Sort	
+	output = mwms(secuencias);	
+
+	//OUTPUT FILE
+	file_output = open(output_name.c_str(), O_WRONLY | O_CREAT, S_IRWXO | S_IRWXG | S_IRWXU);
+	write(file_output, &output[0], size);
+	close(file_output);
+
+	if(debug == 1){
+		cout << endl;
+		cout << "Modo debug: secuencia final ordenada." << endl;
+		for (std::vector<float>::iterator it = output.begin(); it != output.end(); ++it)
+		{
+			cout << *it << endl;
+		}
+		cout << endl;
+	}
+	return 0;
+}
