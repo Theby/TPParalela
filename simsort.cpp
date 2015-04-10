@@ -1,3 +1,9 @@
+/***********************************************
+ * LAB1: SIMD - Paralelismo a nivel de instrucción
+ * Desarrollado por: Esteban Gaete Flores
+ * USACH - Ramo: Taller de Programación Paralela
+ ***********************************************/
+
 #include <vector>
 #include <iostream>
 #include <smmintrin.h>
@@ -11,25 +17,9 @@
 #include <functional>
 #include <stdlib.h> 
 
-// g++ -msse3 -msse4 simsort.cpp -std=c++11
-// Gprof: g++ -pg -msse3 -msse4 simsort.cpp -std=c++11
-//        gprof -p a.out gmon.out > analysis.txt
-
 using namespace std;
 
-void printf_register(vector<float> R){
-	cout << "(";
-	for (std::vector<float>::iterator i = R.begin(); i != R.end(); ++i)
-	{
-		cout << " " << *i;
-	}
-	cout << ")\n";
-}
-
-void printf_debug(__m128 R){
-	printf("(%5.3f, %5.3f, %5.3f, %5.3f)\n", R[0], R[1], R[2], R[3]);
-}
-
+/* HELPERS */
 // Intercambia los valores intermedios del arreglo
 __m128 swapMiddle(__m128 R){
 	return _mm_shuffle_ps(R, R, _MM_SHUFFLE(3, 1, 2, 0));
@@ -51,6 +41,9 @@ __m128 primeroRepetido(__m128 R){
 }
 
 // Realiza el paso intermedio de una red minmax
+// La razón de está función es que este paso es usado
+// al final de la Bitonic Merge Network y para no repetir código
+// se a exteriorizado
 __m128 middleMinMax(__m128 R){
 	__m128 aux_r;
 
@@ -58,23 +51,8 @@ __m128 middleMinMax(__m128 R){
 	return _mm_shuffle_ps(_mm_min_ps(R,aux_r), _mm_max_ps(R,aux_r), _MM_SHUFFLE(2, 0, 2, 0));
 }
 
-// Realiza una MinMax Network
-__m128 minmaxNetwork(__m128 R){
-	__m128 aux_r;
-
-	aux_r = _mm_shuffle_ps(R,R, _MM_SHUFFLE(3, 2, 3, 2));
-	R = _mm_shuffle_ps(_mm_min_ps(R,aux_r), _mm_max_ps(R,aux_r), _MM_SHUFFLE(1, 0, 1, 0));
-
-	R = middleMinMax(R);
-
-	aux_r = swapMiddle(R);
-	R = _mm_shuffle_ps(_mm_min_ps(R,aux_r), _mm_max_ps(R,aux_r), _MM_SHUFFLE(3, 2, 1, 0));
-
-	return R;
-}
-
 // Compara dos registros dejando los valores menores menores en R1 y los mayores en R2
-// comparano por columna
+// La comparación se hace por columna
 void compara2R(__m128& R1, __m128 &R2){
 	__m128 aux1, aux2;
 	__m128 comp;
@@ -90,7 +68,65 @@ void compara2R(__m128& R1, __m128 &R2){
 	R2 = aux2;
 }
 
-// Realiza una MinMax Network entre cuatro registros en ves de cuatro números de un solo registro
+// Pasa cuatro arreglos de 4 digitos a un vector, este guarda la secuencia
+// ordenada de forma secuencial
+vector<float> float16(float* a, float* b, float* c, float* d){
+	vector<float> v;
+
+	for(int i=0; i < 16 ; i++){
+		if(i<4){
+			v.push_back(a[i]);
+		}else if(i>=4 && i<8){
+			v.push_back(b[i%4]);
+		}else if(i>=8 && i<12){
+			v.push_back(c[i%4]);
+		}else if(i>=12 && i<16){
+			v.push_back(d[i%4]);
+		}
+	}
+
+	return v;
+}
+
+// Metodo push usado para incluir elementos en un heap como si fuera un minheap
+void Push(vector<float>& heap, float val) {
+    heap.push_back(val);
+    push_heap(heap.begin(), heap.end(), greater<float>());
+}
+
+// Metodo pop usado para sacar elementos en un heap como si fuera un minheap
+float Pop(vector<float>& heap) {
+    float val = heap.front();
+     
+    //This operation will move the smallest element to the end of the vector
+    pop_heap(heap.begin(), heap.end(), greater<float>());
+ 
+    //Remove the last element from vector, which is the smallest element
+    heap.pop_back();
+
+    return val;
+}
+
+/* Operaciones SIMD */
+
+// Realiza una MinMax Network sobre un registro dejando ordenado
+// de menor a mayor los números en él
+__m128 minmaxNetwork(__m128 R){
+	__m128 aux_r;
+
+	aux_r = _mm_shuffle_ps(R,R, _MM_SHUFFLE(3, 2, 3, 2));
+	R = _mm_shuffle_ps(_mm_min_ps(R,aux_r), _mm_max_ps(R,aux_r), _MM_SHUFFLE(1, 0, 1, 0));
+
+	R = middleMinMax(R);
+
+	aux_r = swapMiddle(R);
+	R = _mm_shuffle_ps(_mm_min_ps(R,aux_r), _mm_max_ps(R,aux_r), _MM_SHUFFLE(3, 2, 1, 0));
+
+	return R;
+}
+
+// Realiza una MinMax Network entre cuatro registros, esto deja ordenado
+// Todos los registros comparando por columnas
 __m128 minmaxNetwork_R(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 
 	// Compara el primero con el tercero
@@ -105,6 +141,8 @@ __m128 minmaxNetwork_R(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	compara2R(Bf, Cf);
 }
 
+// Realiza el ordenamiento InRegister, ordenando cuatro registros en una matriz
+// de 4x4
 void ordenamientoInRegister(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 
 	// MinMax entre los cuatro registros
@@ -117,6 +155,7 @@ void ordenamientoInRegister(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 }
 
 // Ejecuta una Bionic Merge Network
+// Esto ordena dos registros dejando los números ordenados de menor a mayor
 void BMN(__m128& Af, __m128& Bf){
 	__m128 Af_bmn, Bf_bmn, Af_lmm, Bf_lmm;;
 
@@ -145,10 +184,11 @@ void BMN(__m128& Af, __m128& Bf){
 
 	// Reordena el registro intermedio
 	Af = swapMiddle(Af_bmn);
-	Bf = swapMiddle(Bf_bmn);	
+	Bf = swapMiddle(Bf_bmn);
 }
 
 // Ejecuta mergeSIMD sobre cuatro arreglos (16 números)
+// Esto deja ordenado los 16 números de de menor a mayor entre los 4 registros
 void mergeSIMD(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	__m128 O1, O2, O2_menor, O2_mayor;
 	__m128 comp;
@@ -188,10 +228,14 @@ void mergeSIMD(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	Df = O2;
 }
 
+
+/* Conjunto de operaciones SIMD */
+// Ejecuta todas las operaciones de SIMD con el fin de ordenar 16 digitos
+// entre 4 registros
 void SIMD_Part(float* a, float* b, float* c, float* d){
 	__m128 Af, Bf, Cf, Df;
 
-	// Los pasa a registros de punto flotante
+	// Guarda los arreglos en registros de punto flotante
 	Af = _mm_load_ps(a);
 	Bf = _mm_load_ps(b);
 	Cf = _mm_load_ps(c);
@@ -222,75 +266,15 @@ void SIMD_Part(float* a, float* b, float* c, float* d){
 	_mm_store_ps(d, Df);
 }
 
-vector<float> float16(float* a, float* b, float* c, float* d){
-	vector<float> v;
-
-	for(int i=0; i < 16 ; i++){
-		if(i<4){
-			v.push_back(a[i]);
-		}else if(i>=4 && i<8){
-			v.push_back(b[i%4]);
-		}else if(i>=8 && i<12){
-			v.push_back(c[i%4]);
-		}else if(i>=12 && i<16){
-			v.push_back(d[i%4]);
-		}
-	}
-
-	return v;
-}
-
-void Push(vector<float>& heap, float val) {
-    heap.push_back(val);
-    push_heap(heap.begin(), heap.end(), greater<float>());
-}
-
-float Pop(vector<float>& heap) {
-    float val = heap.front();
-     
-    //This operation will move the smallest element to the end of the vector
-    pop_heap(heap.begin(), heap.end(), greater<float>());
- 
-    //Remove the last element from vector, which is the smallest element
-    heap.pop_back();
-
-
-    return val;
-}
-
+/* Parte no SIMD: Multiway Merge Sort */
+// Implementa un MWMS sobre varios vectores usando una implementación
+// directa de minHeap
+// Idea sacada de: https://codeconnect.wordpress.com/2013/09/05/max-min-heap-using-c-stl/
 vector<float> mwms(vector<vector<float>> secuencias){
 	vector<float> output;
-	/*float menor = 0;
-	int vector_id = 0;
-
-	while(!secuencias.empty()){	
-		
-		menor = secuencias[0][0];
-		
-		for (int i = 0; i < secuencias.size(); i++)
-		{
-
-			if(!secuencias[i].empty()){
-				vector<float> aux_v = secuencias[i];
-
-				if (menor >= aux_v[0])
-				{
-					menor = aux_v[0];
-					vector_id = i;
-				}
-			}else{				
-				secuencias.erase(secuencias.begin()+i);
-			}
-		}
-
-		output.push_back(menor);
-		secuencias[vector_id].erase(secuencias[vector_id].begin());
-		if(secuencias[vector_id].empty()){
-			secuencias.erase(secuencias.begin()+vector_id);
-		}
-	}*/
-
 	vector<float> minHeap;
+
+	// Recorre el vector en su totalidad ingresando cada elemento en el minHeap
 	for (int j = 0; j < secuencias.size(); j++){
 		for (int i = 0; i < secuencias[j].size(); i++)
 		{
@@ -298,10 +282,10 @@ vector<float> mwms(vector<vector<float>> secuencias){
 		}
 	}
 
+	// Pasa el minHeap ordenado a un vector
 	while(!minHeap.empty()){
 		output.push_back(Pop(minHeap));
 	}
-
 
 	return output;
 }
@@ -316,6 +300,8 @@ vector<float> mwms(vector<vector<float>> secuencias){
 
 
 
+
+/* MAIN */
 int main(int argc, char *argv[]){
 	/* Arreglo de números */
 	// Vector que guarda cada secuencia ordenada por separado
@@ -335,17 +321,23 @@ int main(int argc, char *argv[]){
 	// Referencia al archivo de salida
 	int file_output;
 	/* Command lines */
+	// Nombre del archivo de entrada
 	string input_name;
+	// Nombre del archivo de salida
 	string output_name = "output.raw";
+	// Lista de comandos disponibles en el sistema
 	string command_i = "-i";
 	string command_o = "-o";
 	string command_N = "-N";
 	string command_d = "-d";
 	string command_h = "-h";
+	// Numero de elementos a leer del archivo de entrada
 	int num_elementos = 0;
+	// Permite saber si está activado el modo debug o no
 	int debug = 0;
 
-	/* Analisis de los parametros de entrada */
+	/* Analisis de los parametros de entrada 
+		Se comprueba la validez de cada parametro */
 	for (int i = 1; i < argc; i++){
 		if(command_h.compare(argv[i]) == 0){
 			cout << endl;
@@ -439,12 +431,21 @@ int main(int argc, char *argv[]){
 	}
 
 	/* Reading */
+	// Carga el fichero de entrada como solo lectura, modo binario y con el puntero
+	// al final del archivo
+	// Este algoritmo fue obtenido de: http://www.cplusplus.com/doc/tutorial/basic_io/
 	ifstream input(input_name.c_str(), ios::in|ios::binary|ios::ate);
 	if(input.is_open()){
+		// Como el puntero está al final del archivo es posible obtener
+		// el tamaño total del archivo con este metodo
 		size = input.tellg();
+		// Se crea el arreglo de flotantes para guardar todos los datos
 	    memblock = new float[size];
+	    // Pone el puntero de lectura al comienzo del fichero
 	    input.seekg (0, ios::beg);
+	    // Lee todo el fichero y guarda la información en el arreglo memblock
 	    input.read ((char *)memblock, size);
+	    // Cierra el puntero al archivo
 	    input.close();
 	}else{
 		cout << endl;
@@ -454,20 +455,33 @@ int main(int argc, char *argv[]){
 		return -1;
 	}
 
+	// Se determina el largo real de números flotantes
+	// que tiene el fichero, esto es calculado a partir del
+	// size o del parametro -N según corresponda
 	if(num_elementos == 0){
 		largo = (int)size/4;
 	}else{
 		largo = num_elementos;
 	}
-	veces = largo/16;	
+	// Permite saber cuantas veces se hará un ordenamiento
+	// de 16 números y por tanto cuantas secuencias han sido
+	// generadas
+	veces = largo/16;
 
+	/* Declaración de registros */
+	// Se usan de a cuatro registros alineados a 16 bytes
 	float a[4] __attribute__((aligned(16)));
 	float b[4] __attribute__((aligned(16)));
 	float c[4] __attribute__((aligned(16)));
 	float d[4] __attribute__((aligned(16)));
 
+	/* Ordenamiento */
+	// Se realiza según las veces especificadas
 	for (int i = 0; i < veces; i++)
 	{
+		// Se asignan desde memblock de a 16 números en los registros
+		// los cuatro primeros van a 'a', los cuatro siguientes a 'b'
+		// y así hasta d, luego se repite el siglo según las veces
 		for (int j = 0; j < 4; j++)
 		{
 			a[j] = memblock[j+0 + i*(16)];
@@ -476,21 +490,31 @@ int main(int argc, char *argv[]){
 			d[j] = memblock[j+12 + i*(16)];
 		}
 
-		// Ordena a nivel de procesador
+		/* Ordenamiento SIMD */
+		// Se ejecuta el ordenamiento en los registros
 		SIMD_Part(a, b, c, d);
 
-		// Se añade el resultado
+		// Se añade el resultado ordenado al vector de secuencias
+		// float 16 pasa todos los registros a un único vector
 		secuencias.push_back(float16(a, b, c, d));
 	}	
 
-	// MultiWay Merge Sort	
-	output = mwms(secuencias);	
+	/* MultiWay Merge Sort	*/
+	// Hace un merge de todos los vectores de 16 ordenados
+	output = mwms(secuencias);
 
-	//OUTPUT FILE
-	file_output = open(output_name.c_str(), O_WRONLY | O_CREAT, S_IRWXO | S_IRWXG | S_IRWXU);
+	/* Output y Write output */
+	// Se abre un archivo solo para escribir en él, además se le da acceso a todos
+	// para leerlo o modificarlo
+	file_output = open(output_name.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRWXO | S_IRWXG | S_IRWXU);
+	// Se escribe todo el output en el archivo de salida
 	write(file_output, &output[0], size);
+	// Se cierra el archivo
 	close(file_output);
 
+	/* Debug */
+	// Si debug está activo se escribe toda la secuencia ordenada
+	// con un número por línea
 	if(debug == 1){
 		cout << endl;
 		cout << "Modo debug: secuencia final ordenada." << endl;
@@ -500,5 +524,6 @@ int main(int argc, char *argv[]){
 		}
 		cout << endl;
 	}
+
 	return 0;
 }
