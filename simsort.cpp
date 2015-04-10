@@ -433,7 +433,7 @@ int main(int argc, char *argv[]){
 	/* Reading */
 	// Carga el fichero de entrada como solo lectura, modo binario y con el puntero
 	// al final del archivo
-	// Este algoritmo fue obtenido de: http://www.cplusplus.com/doc/tutorial/basic_io/
+	// Este algoritmo fue obtenido de: http://www.cplusplus.com/doc/tutorial/files/
 	ifstream input(input_name.c_str(), ios::in|ios::binary|ios::ate);
 	if(input.is_open()){
 		// Como el puntero está al final del archivo es posible obtener
