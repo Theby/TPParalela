@@ -1,8 +1,13 @@
-FLAGS=-msse4 -std=c++11 -O3
-FILE=simsort.cpp
-OUT=simsort
+FLAGS = -std=c++11 -Wall -msse4 -O3
+DEPS = minHeap.hpp
+OBJ = minHeap.o simsort.o
 
-all: SIMD
+%.o: %.cpp $(DEPS)
+	g++ $(FLAGS) -c -o $@ $<
 
-SIMD: 
-	g++ $(FILE) -o $(OUT) $(FLAGS)
+simsort: $(OBJ)
+	g++ $(FLAGS) -o $@ $^
+
+clean:
+	rm -f Simsort *.o
+.PHONY: all clean

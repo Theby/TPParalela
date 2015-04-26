@@ -16,6 +16,7 @@
 #include <iterator>
 #include <functional>
 #include <stdlib.h> 
+#include "minHeap.hpp"
 
 using namespace std;
 
@@ -88,25 +89,6 @@ vector<float> float16(float* a, float* b, float* c, float* d){
 	return v;
 }
 
-// Metodo push usado para incluir elementos en un heap como si fuera un minheap
-void Push(vector<float>& heap, float val) {
-    heap.push_back(val);
-    push_heap(heap.begin(), heap.end(), greater<float>());
-}
-
-// Metodo pop usado para sacar elementos en un heap como si fuera un minheap
-float Pop(vector<float>& heap) {
-    float val = heap.front();
-     
-    //This operation will move the smallest element to the end of the vector
-    pop_heap(heap.begin(), heap.end(), greater<float>());
- 
-    //Remove the last element from vector, which is the smallest element
-    heap.pop_back();
-
-    return val;
-}
-
 /* Operaciones SIMD */
 
 // Realiza una MinMax Network sobre un registro dejando ordenado
@@ -127,7 +109,7 @@ __m128 minmaxNetwork(__m128 R){
 
 // Realiza una MinMax Network entre cuatro registros, esto deja ordenado
 // Todos los registros comparando por columnas
-__m128 minmaxNetwork_R(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
+void minmaxNetwork_R(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 
 	// Compara el primero con el tercero
 	compara2R(Af, Cf);
@@ -268,30 +250,64 @@ void SIMD_Part(float* a, float* b, float* c, float* d){
 
 /* Parte no SIMD: Multiway Merge Sort */
 // Implementa un MWMS sobre varios vectores usando una implementación
-// directa de minHeap
-// Idea sacada de: https://codeconnect.wordpress.com/2013/09/05/max-min-heap-using-c-stl/
+// de minHeap
 vector<float> mwms(vector<vector<float>> secuencias){
 	vector<float> output;
-	vector<float> minHeap;
+	std::tuple<float, float> elemento;
+	MinHeap minHeap;
+	int num_lista;
+	cout << "in" << secuencias.size() << endl;
+	// Recorre todas las listas para sacar los primeros elementos
+	// eliminandolo de su arreglo original
+	for (unsigned int j = 0; j < secuencias.size(); j++){
+		minHeap.Insert(std::make_tuple(secuencias[j][0], j));
+		// Borra el elemento de la lista original
+		secuencias[j].erase(secuencias[j].begin());	
+	}
 
-	// Recorre el vector en su totalidad ingresando cada elemento en el minHeap
-	for (int j = 0; j < secuencias.size(); j++){
-		for (int i = 0; i < secuencias[j].size(); i++)
-		{
-			Push(minHeap, secuencias[j][i]);
+	//cout << "ret-1" << endl;
+
+	// Mientras el minHeap no esté vacio
+	while(!minHeap.empty()){
+		//cout << "ret-2-1" << endl;
+		// Saca el menor, lo borra y lo guarda en output
+		elemento = minHeap.Delete();
+		output.push_back(std::get<0>(elemento));
+
+		// Búsca otro número de la misma lista de donde salio
+		// y lo ingresa al minHeap
+		num_lista = std::get<1>(elemento);
+		//cout << "ret-2-2" << endl;
+		// Si la lista no está vacia
+		if(!secuencias[num_lista].empty()){
+			//cout << "ret-3-1" << endl;
+			minHeap.Insert(
+				std::make_tuple(
+					secuencias[num_lista][0],
+					num_lista
+				)
+			);
+			secuencias[num_lista].erase(secuencias[num_lista].begin());
+			//cout << "ret-3-2" << endl;
+		}else{
+			// Si no
+
+			// añade el primer elemento de la primera lista disponible
+			// si es que quedan listas
+			if(!secuencias.empty()){
+				//minHeap.Insert(std::make_tuple(secuencias[0][0], 0));
+				cout << "ret-4-1-2=" << secuencias.size() << endl;
+				cout << "=" << secuencias[num_lista].size() << endl;
+				secuencias.erase(secuencias.begin()+num_lista);
+				// Borra el elemento de la lista original
+				//secuencias[0].erase(secuencias[0].begin());									
+			}
+			//cout << "ret-4-2" << minHeap.empty() << endl;
 		}
 	}
-
-	// Pasa el minHeap ordenado a un vector
-	while(!minHeap.empty()){
-		output.push_back(Pop(minHeap));
-	}
-
+	cout << "out" << output.size() << endl;
 	return output;
 }
-
-
-
 
 
 
