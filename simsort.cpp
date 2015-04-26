@@ -256,7 +256,7 @@ vector<float> mwms(vector<vector<float>> secuencias){
 	std::tuple<float, float> elemento;
 	MinHeap minHeap;
 	int num_lista;
-	cout << "in" << secuencias.size() << endl;
+	
 	// Recorre todas las listas para sacar los primeros elementos
 	// eliminandolo de su arreglo original
 	for (unsigned int j = 0; j < secuencias.size(); j++){
@@ -265,11 +265,8 @@ vector<float> mwms(vector<vector<float>> secuencias){
 		secuencias[j].erase(secuencias[j].begin());	
 	}
 
-	//cout << "ret-1" << endl;
-
 	// Mientras el minHeap no esté vacio
 	while(!minHeap.empty()){
-		//cout << "ret-2-1" << endl;
 		// Saca el menor, lo borra y lo guarda en output
 		elemento = minHeap.Delete();
 		output.push_back(std::get<0>(elemento));
@@ -277,35 +274,18 @@ vector<float> mwms(vector<vector<float>> secuencias){
 		// Búsca otro número de la misma lista de donde salio
 		// y lo ingresa al minHeap
 		num_lista = std::get<1>(elemento);
-		//cout << "ret-2-2" << endl;
+
 		// Si la lista no está vacia
 		if(!secuencias[num_lista].empty()){
-			//cout << "ret-3-1" << endl;
 			minHeap.Insert(
 				std::make_tuple(
 					secuencias[num_lista][0],
 					num_lista
 				)
 			);
-			secuencias[num_lista].erase(secuencias[num_lista].begin());
-			//cout << "ret-3-2" << endl;
-		}else{
-			// Si no
-
-			// añade el primer elemento de la primera lista disponible
-			// si es que quedan listas
-			if(!secuencias.empty()){
-				//minHeap.Insert(std::make_tuple(secuencias[0][0], 0));
-				cout << "ret-4-1-2=" << secuencias.size() << endl;
-				cout << "=" << secuencias[num_lista].size() << endl;
-				secuencias.erase(secuencias.begin()+num_lista);
-				// Borra el elemento de la lista original
-				//secuencias[0].erase(secuencias[0].begin());									
-			}
-			//cout << "ret-4-2" << minHeap.empty() << endl;
+			secuencias[num_lista].erase(secuencias[num_lista].begin());			
 		}
-	}
-	cout << "out" << output.size() << endl;
+	}	
 	return output;
 }
 

@@ -6,13 +6,14 @@
 
 class MinHeap{
 	private:
-		std::vector<std::tuple<float, float>> minHeap;
-		bool Compare(std::tuple<float, float>, std::tuple<float, float>);
+		std::vector<std::tuple<float, int>> minHeap;
+		bool Compare(std::tuple<float, int>, std::tuple<float, int>);
 
 	public:
-		void Insert(std::tuple<float, float>);
-		std::tuple<float, float> Delete();
+		void Insert(std::tuple<float, int>);
+		std::tuple<float, int> Delete();
 		bool empty();
+		void printMainHeap();
 };
 
 #endif
