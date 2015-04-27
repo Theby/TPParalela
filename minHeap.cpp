@@ -1,5 +1,10 @@
 #include "minHeap.hpp"
 
+/*
+Permite comparar dos tuplas comparando solo sus primeros elementos
+retorna true si el primero es menor que el segundo.
+Falso en otro caso.
+*/
 bool MinHeap::Compare(std::tuple<float, int> first, std::tuple<float, int> second){
 	if(std::get<0>(first) < std::get<0>(second)){
 		return true;
@@ -8,6 +13,10 @@ bool MinHeap::Compare(std::tuple<float, int> first, std::tuple<float, int> secon
 	return false;
 }
 
+/*
+Permite insertar una tupla al minHeap,
+cada vez que se agrega un número se realiza un Heapify-up.
+*/
 void MinHeap::Insert(std::tuple<float, int> newTuple){
 	int myself;
 	int father;
@@ -43,6 +52,11 @@ void MinHeap::Insert(std::tuple<float, int> newTuple){
 	}	
 }
 
+/*
+Permite obtener el número menor del minHeap.
+Al realizar esto ese número es borrado del heap
+y el árbol es ordenado mediante Heapify-down.
+*/
 std::tuple<float, int> MinHeap::Delete(){
 	int myself = 0;
 	int izq = 2*myself + 1;
@@ -106,6 +120,9 @@ std::tuple<float, int> MinHeap::Delete(){
 	return menor;
 }
 
+/*
+Permite saber si el minHeap está vacio
+*/
 bool MinHeap::empty(){	
 	return this->minHeap.empty();
 }

@@ -277,12 +277,14 @@ vector<float> mwms(vector<vector<float>> secuencias){
 
 		// Si la lista no está vacia
 		if(!secuencias[num_lista].empty()){
+			// Agrea un nuevo elemento de la lista de donde salió
 			minHeap.Insert(
 				std::make_tuple(
 					secuencias[num_lista][0],
 					num_lista
 				)
 			);
+			// Borra el número de la lista de listas
 			secuencias[num_lista].erase(secuencias[num_lista].begin());			
 		}
 	}	
@@ -326,16 +328,19 @@ int main(int argc, char *argv[]){
 	string command_o = "-o";
 	string command_N = "-N";
 	string command_d = "-d";
-	string command_h = "-h";
+	string command_H = "-H";
+	string command_help = "-help";
 	// Numero de elementos a leer del archivo de entrada
 	int num_elementos = 0;
+	// Permite saber el número de hebras que se usarán
+	int num_hebras = 1;
 	// Permite saber si está activado el modo debug o no
 	int debug = 0;
 
 	/* Analisis de los parametros de entrada 
 		Se comprueba la validez de cada parametro */
 	for (int i = 1; i < argc; i++){
-		if(command_h.compare(argv[i]) == 0){
+		if(command_help.compare(argv[i]) == 0){
 			cout << endl;
 			cout << "Este programa tiene 5 parametros de entrada, de los cuales" << endl;
 			cout << "uno es obligatorio, si el resto no se especifica se usarán valores por defecto." << endl;
@@ -344,8 +349,9 @@ int main(int argc, char *argv[]){
 			cout << "  -i    |  nombre archivo de entrada |                     " << endl;
 			cout << "  -o    |  nombre archivo de salida  |  output.raw         " << endl;
 			cout << "  -N    |  largo de la lista         |  largo total de -i  " << endl;
+			cout << "  -H    |  número de hebras          |  1                  " << endl;
 			cout << "  -d    |  1 o 0                     |  0                  " << endl;
-			cout << "  -h    |                            |                     " << endl;
+			cout << " -help  |                            |                     " << endl;
 			cout << endl;
 			cout << "Comando |  Descripción                                                          " << endl;
 			cout << "  -i    |  Permite identificar el archivo de entrada.                           " << endl;
@@ -354,9 +360,11 @@ int main(int argc, char *argv[]){
 			cout << "        |  Debe ser de extension *.raw                                          " << endl;
 			cout << "  -N    |  Determina cuantos números hay en el archivo de entrada               " << endl;
 			cout << "  -d    |  Activa o desactiva el modo debug.                                    " << endl;
+			cout << "  -H    |  Define cuantas hebras se ejecutarán de forma concurrente entre todos " << endl;
+			cout << "        |  los procesadores, por defecto se usará una sola hebra.               " << endl;
 			cout << "        |  0: No existira ningún feedback del comportamiento de la aplicación   " << endl;
 			cout << "        |  1: Se imprimirá la secuencia final ordenada, un elemento por línea.  " << endl;
-			cout << "  -h    |  Activa esta ventana de ayuda                                         " << endl;
+			cout << " -help  |  Activa esta ventana de ayuda                                         " << endl;
 			cout << endl;
 			return -2;
 		}
@@ -365,13 +373,13 @@ int main(int argc, char *argv[]){
 	if(argc <= 2){
 		cout << endl;
 		cout << "Debe especificar almenos el archivo de entrada con '-i nombrearchivo.raw'" << endl;
-		cout << "Para más ayuda use '-h'" << endl;
+		cout << "Para más ayuda use '-help'" << endl;
 		cout << endl;
 		return -1;
 	}else if(argc%2 == 0){
 		cout << endl;
 		cout << "Todo comando debe tener un argumento, si el comando no es escrito se usarán los valores por defecto" << endl;
-		cout << "Para más ayuda use '-h'" << endl;
+		cout << "Para más ayuda use '-help'" << endl;
 		cout << endl;
 		return -1;
 	}else{
@@ -382,7 +390,7 @@ int main(int argc, char *argv[]){
 				if(input_name.find(".raw") == string::npos){
 					cout << endl;
 					cout << "El parametro -i debe contener un archivo de extensión *.raw" << endl;
-					cout << "Para más ayuda use '-h'" << endl;
+					cout << "Para más ayuda use '-help'" << endl;
 					cout << endl;
 					return -1;
 				}
@@ -391,33 +399,40 @@ int main(int argc, char *argv[]){
 				if(output_name.find(".raw") == string::npos){
 					cout << endl;
 					cout << "El parametro -i debe contener un nombre de extensión *.raw" << endl;
-					cout << "Para más ayuda use '-h'" << endl;
+					cout << "Para más ayuda use '-help'" << endl;
 					cout << endl;
 					return -1;
 				}
 			}else if(command_N.compare(argv[i]) == 0){
 				num_elementos = atoi(argv[i+1]);
-				if(num_elementos <= 0){
+				if(num_elementos < 16){
 					cout << endl;
-					cout << "El parametro '-n' debe ser mayor o igual a 1." << endl;
-					cout << "Para más ayuda use '-h'" << endl;
+					cout << "El parametro '-N' debe ser mayor o igual a 16." << endl;
+					cout << "Para más ayuda use '-help'" << endl;
 					cout << endl;
 					return -1;
-				}else if(num_elementos != 1 && num_elementos != 2 && num_elementos != 4 && num_elementos != 8){
-					if(num_elementos%16 != 0){
-						cout << endl;
-						cout << "El parametro '-n' debe ser potencia de 2." << endl;
-						cout << "Para más ayuda use '-h'" << endl;
-						cout << endl;
-						return -1;
-					}
+				}else if(num_elementos%16 != 0){
+					cout << endl;
+					cout << "El parametro '-N' debe ser multiplo de 16." << endl;
+					cout << "Para más ayuda use '-help'" << endl;
+					cout << endl;
+					return -1;
+				}
+			}else if(command_H.compare(argv[i]) == 0){
+				num_hebras = atoi(argv[i+1]);
+				if(num_hebras <= 0){
+					cout << endl;
+					cout << "El parametro '-H' debe ser mayor o igual a 1." << endl;
+					cout << "Para más ayuda use '-help'" << endl;
+					cout << endl;
+					return -1;
 				}
 			}else if(command_d.compare(argv[i]) == 0){
 				debug = atoi(argv[i+1]);
 				if(debug > 1 || debug < 0){
 					cout << endl;
 					cout << "El parametro de '-d' debe ser 0 o 1." << endl;
-					cout << "Para más ayuda use '-h'" << endl;
+					cout << "Para más ayuda use '-help'" << endl;
 					cout << endl;
 					return -1;
 				}
@@ -446,7 +461,7 @@ int main(int argc, char *argv[]){
 	}else{
 		cout << endl;
 		cout << "No ha sido posible abrir el archivo" << endl;
-		cout << "Para más ayuda use '-h'" << endl;
+		cout << "Para más ayuda use '-help'" << endl;
 		cout << endl;
 		return -1;
 	}
@@ -456,9 +471,19 @@ int main(int argc, char *argv[]){
 	// size o del parametro -N según corresponda
 	if(num_elementos == 0){
 		largo = (int)size/4;
+
+		//Verifica que el largo del documento sea potencia de 16
+		if(largo%16 != 0){
+			cout << endl;
+			cout << "El parametro '-N' debe ser multiplo de 16." << endl;
+			cout << "Para más ayuda use '-help'" << endl;
+			cout << endl;
+			return -1;
+		}
 	}else{
 		largo = num_elementos;
 	}
+
 	// Permite saber cuantas veces se hará un ordenamiento
 	// de 16 números y por tanto cuantas secuencias han sido
 	// generadas

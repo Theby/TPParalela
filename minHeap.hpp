@@ -4,6 +4,10 @@
 #include <tuple>
 #include <vector>
 
+/*
+Clase MinHeap que permite crear y manipular un
+Heap binario que deja los números menores arriba.
+*/
 class MinHeap{
 	private:
 		std::vector<std::tuple<float, int>> minHeap;
