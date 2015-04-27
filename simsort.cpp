@@ -1,9 +1,10 @@
 /***********************************************
- * LAB1: SIMD - Paralelismo a nivel de instrucción
+ * LAB2: OpenMP - SIMD + Shared-Memory
  * Desarrollado por: Esteban Gaete Flores
  * USACH - Ramo: Taller de Programación Paralela
  ***********************************************/
 
+#include <math.h>
 #include <vector>
 #include <iostream>
 #include <smmintrin.h>
@@ -17,6 +18,10 @@
 #include <functional>
 #include <stdlib.h> 
 #include "minHeap.hpp"
+
+#ifdef _OPENMP
+	#include <omp.h>
+#endif
 
 using namespace std;
 
@@ -291,6 +296,98 @@ vector<float> mwms(vector<vector<float>> secuencias){
 	return output;
 }
 
+vector<float> arbolDeHebras(int nivel_actual, 
+							int nivel_recursividad_maximo, 
+							float * memblock,
+							int inicio,
+							int largo
+							)
+{
+	vector<vector<float>> output;
+	vector<float> mergedOutput;
+	output.reserve(2);
+cout << "Soy " << omp_get_thread_num() << " del nivel " << nivel_actual << "/" << nivel_recursividad_maximo << " con inicio " << inicio << " y largo " << largo << endl;
+	#pragma omp parallel num_threads(2) firstprivate(nivel_actual, nivel_recursividad_maximo, inicio, largo) shared(output, memblock)
+	{
+		// Guardo mi ID del nivel, puede ser 0 o 1
+		int mytid = omp_get_thread_num();
+		// Dentro del pragma entramos a un nuevo nivel de paralelismo
+		nivel_actual++;
+		// Se divide en dos el largo
+		largo /= 2;
+		// Se asigna el nuevo inicio del arreglo
+		inicio += largo * mytid;
+
+		// Reviso si he llegado al nivel de recursividad más bajo
+		if(nivel_actual != nivel_recursividad_maximo){
+			// Si no
+
+			// Creo dos hebras más en el siguiente nivel
+			// Capturo el resultado de mis dos hebras en mi espacio asignado
+			output[mytid] = arbolDeHebras(nivel_actual,nivel_recursividad_maximo, memblock, inicio, largo);
+		}else{
+			// Si he llegado entonces realizo el SIMD Sort y el MWMS de mis listas
+			// asignadas guardando el resultado en en mi espacio asignado
+			vector<vector<float>> secuencias;
+			// Número de veces que se cargaran 16 flotantes y que se ejecutará
+			// toda la secuencia SIMD completa
+			int veces = largo/16;
+cout << "Soy " << omp_get_thread_num() << " del último nivel con estas hermanas: " << omp_get_num_threads() << endl;
+cout << omp_get_thread_num() << ")" << "creando arreglos" << endl;
+			/* Declaración de registros */
+			// Se usan de a cuatro registros alineados a 16 bytes
+			float a[4] __attribute__((aligned(16)));
+			float b[4] __attribute__((aligned(16)));
+			float c[4] __attribute__((aligned(16)));
+			float d[4] __attribute__((aligned(16)));
+cout << omp_get_thread_num() << ")" << "arreglos creados" << endl;
+cout << omp_get_thread_num() << ")" << "datos para empezar el ciclo:" << "veces:" << veces << " inicio:" << inicio << endl;
+			/* Ordenamiento */
+			// Se realiza según las veces correspondientes al largo
+			for (int i = 0; i < veces; i++)
+			{
+				// Se asignan desde memblock de a 16 números en los registros
+				// los cuatro primeros van a 'a', los cuatro siguientes a 'b'
+				// y así hasta d, luego se repite el siglo según las veces
+				for (int j = 0; j < 4; j++)
+				{
+					a[j] = memblock[inicio + j+0 + i*(16)];
+					b[j] = memblock[inicio + j+4 + i*(16)];
+					c[j] = memblock[inicio + j+8 + i*(16)];
+					d[j] = memblock[inicio + j+12 + i*(16)];
+				}
+
+				/* Ordenamiento SIMD */
+				// Se ejecuta el ordenamiento en los registros
+				SIMD_Part(a, b, c, d);
+
+				// Se añade el resultado ordenado al vector de secuencias
+				// float 16 pasa todos los registros a un único vector
+				secuencias.push_back(float16(a, b, c, d));
+			}
+
+			/* MultiWay Merge Sort	*/
+			// Hace un merge de todos los vectores de 16 ordenados
+			output[mytid] = mwms(secuencias);
+		}		
+	}
+
+	// Hago Merge two-way para pasar ambas listas del output a una sola
+	mergedOutput = mwms(output);
+	return mergedOutput;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -300,8 +397,8 @@ vector<float> mwms(vector<vector<float>> secuencias){
 
 
 /* MAIN */
-int main(int argc, char *argv[]){
-	/* Arreglo de números */
+int main(int argc, char *argv[])
+{	/* Arreglo de números */
 	// Vector que guarda cada secuencia ordenada por separado
 	vector<vector<float>> secuencias;
 	// Guarda la secuencia completa de los números ordenados
@@ -310,12 +407,10 @@ int main(int argc, char *argv[]){
 	// Guarda el tamaño total del archivo leído
 	streampos size;
 	// largo: el largo total de números flotantes del archivo
-	// veces: número de veces que se cargaran 16 flotantes y que se ejecutará
-	// toda la secuencia SIMD completa
-	int largo,veces;
+	int largo;
 	// Arreglo que guarda en memoria el archivo leído en completo
 	// Esto disminuye la cantidad de I/O necesarios para ordenar el archivo de entrada
-	float * memblock;
+	float *memblock;
 	// Referencia al archivo de salida
 	int file_output;
 	/* Command lines */
@@ -328,12 +423,12 @@ int main(int argc, char *argv[]){
 	string command_o = "-o";
 	string command_N = "-N";
 	string command_d = "-d";
-	string command_H = "-H";
+	string command_L = "-L";
 	string command_help = "-help";
 	// Numero de elementos a leer del archivo de entrada
-	int num_elementos = 0;
-	// Permite saber el número de hebras que se usarán
-	int num_hebras = 1;
+	int num_elementos = 0;	
+	// Permite tener el nivel de recursividad del programa
+	int nivel_recursividad = 1;	
 	// Permite saber si está activado el modo debug o no
 	int debug = 0;
 
@@ -349,7 +444,7 @@ int main(int argc, char *argv[]){
 			cout << "  -i    |  nombre archivo de entrada |                     " << endl;
 			cout << "  -o    |  nombre archivo de salida  |  output.raw         " << endl;
 			cout << "  -N    |  largo de la lista         |  largo total de -i  " << endl;
-			cout << "  -H    |  número de hebras          |  1                  " << endl;
+			cout << "  -L    |  número de recursividad    |  1                  " << endl;
 			cout << "  -d    |  1 o 0                     |  0                  " << endl;
 			cout << " -help  |                            |                     " << endl;
 			cout << endl;
@@ -360,8 +455,8 @@ int main(int argc, char *argv[]){
 			cout << "        |  Debe ser de extension *.raw                                          " << endl;
 			cout << "  -N    |  Determina cuantos números hay en el archivo de entrada               " << endl;
 			cout << "  -d    |  Activa o desactiva el modo debug.                                    " << endl;
-			cout << "  -H    |  Define cuantas hebras se ejecutarán de forma concurrente entre todos " << endl;
-			cout << "        |  los procesadores, por defecto se usará una sola hebra.               " << endl;
+			cout << "  -L    |  Define el nivel de recursividad que usará el programa para resolver  " << endl;
+			cout << "        |  el problema, tal que el número de hebras será 2^nivel de recursividad" << endl;
 			cout << "        |  0: No existira ningún feedback del comportamiento de la aplicación   " << endl;
 			cout << "        |  1: Se imprimirá la secuencia final ordenada, un elemento por línea.  " << endl;
 			cout << " -help  |  Activa esta ventana de ayuda                                         " << endl;
@@ -383,8 +478,7 @@ int main(int argc, char *argv[]){
 		cout << endl;
 		return -1;
 	}else{
-		for (int i = 1; i < argc; i++)
-		{
+		for (int i = 1; i < argc; i++){
 			if(command_i.compare(argv[i]) == 0){
 				input_name = argv[i+1];
 				if(input_name.find(".raw") == string::npos){
@@ -418,11 +512,11 @@ int main(int argc, char *argv[]){
 					cout << endl;
 					return -1;
 				}
-			}else if(command_H.compare(argv[i]) == 0){
-				num_hebras = atoi(argv[i+1]);
-				if(num_hebras <= 0){
+			}else if(command_L.compare(argv[i]) == 0){
+				nivel_recursividad = atoi(argv[i+1]);
+				if(nivel_recursividad <= 0){
 					cout << endl;
-					cout << "El parametro '-H' debe ser mayor o igual a 1." << endl;
+					cout << "El parametro '-L' debe ser mayor o igual a 1." << endl;
 					cout << "Para más ayuda use '-help'" << endl;
 					cout << endl;
 					return -1;
@@ -487,42 +581,19 @@ int main(int argc, char *argv[]){
 	// Permite saber cuantas veces se hará un ordenamiento
 	// de 16 números y por tanto cuantas secuencias han sido
 	// generadas
-	veces = largo/16;
+	//veces = largo/16;
 
 	/* Declaración de registros */
 	// Se usan de a cuatro registros alineados a 16 bytes
-	float a[4] __attribute__((aligned(16)));
+	/*float a[4] __attribute__((aligned(16)));
 	float b[4] __attribute__((aligned(16)));
 	float c[4] __attribute__((aligned(16)));
-	float d[4] __attribute__((aligned(16)));
+	float d[4] __attribute__((aligned(16)));*/
 
-	/* Ordenamiento */
-	// Se realiza según las veces especificadas
-	for (int i = 0; i < veces; i++)
-	{
-		// Se asignan desde memblock de a 16 números en los registros
-		// los cuatro primeros van a 'a', los cuatro siguientes a 'b'
-		// y así hasta d, luego se repite el siglo según las veces
-		for (int j = 0; j < 4; j++)
-		{
-			a[j] = memblock[j+0 + i*(16)];
-			b[j] = memblock[j+4 + i*(16)];
-			c[j] = memblock[j+8 + i*(16)];
-			d[j] = memblock[j+12 + i*(16)];
-		}
+	omp_set_dynamic(0);
+    omp_set_nested(1);
 
-		/* Ordenamiento SIMD */
-		// Se ejecuta el ordenamiento en los registros
-		SIMD_Part(a, b, c, d);
-
-		// Se añade el resultado ordenado al vector de secuencias
-		// float 16 pasa todos los registros a un único vector
-		secuencias.push_back(float16(a, b, c, d));
-	}	
-
-	/* MultiWay Merge Sort	*/
-	// Hace un merge de todos los vectores de 16 ordenados
-	output = mwms(secuencias);
+	output = arbolDeHebras(0,nivel_recursividad, memblock, 0, largo);
 
 	/* Output y Write output */
 	// Se abre un archivo solo para escribir en él, además se le da acceso a todos
