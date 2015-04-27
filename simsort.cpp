@@ -296,6 +296,41 @@ vector<float> mwms(vector<vector<float>> secuencias){
 	return output;
 }
 
+/* Merge 2-way */
+// Toma un elemento de un vector y lo compara con el otro
+// Si es menor lo guarda si no guarda el del otro
+// se avanza iterativamente por cada uno mientras se guardan
+// sus valores
+vector<float> mergeTW(vector<float> first, vector<float> second){
+	vector<float> output;
+	int firstCounter = 0;
+	int secondCounter = 0;
+	int size = first.size();
+
+	while(firstCounter < size || secondCounter < size){
+		if(firstCounter == size){
+			output.push_back(second[secondCounter]);
+			secondCounter++;
+		}else if(secondCounter == size){
+			output.push_back(first[firstCounter]);
+			firstCounter++;
+		}else{
+			if(first[firstCounter] < second[secondCounter]){
+				output.push_back(first[firstCounter]);
+				firstCounter++;
+			}else{
+				output.push_back(second[secondCounter]);
+				secondCounter++;
+			}
+		}
+	}
+
+	return output;
+
+}
+
+/* Creación del arbol de threads */
+// Permite hacer todo el algoritmo general
 vector<float> arbolDeHebras(int nivel_actual, 
 							int nivel_recursividad_maximo, 
 							float * memblock,
@@ -305,16 +340,16 @@ vector<float> arbolDeHebras(int nivel_actual,
 {
 	vector<vector<float>> output;
 	vector<float> mergedOutput;
-	output.reserve(2);
-cout << "Soy " << omp_get_thread_num() << " del nivel " << nivel_actual << "/" << nivel_recursividad_maximo << " con inicio " << inicio << " y largo " << largo << endl;
-	#pragma omp parallel num_threads(2) firstprivate(nivel_actual, nivel_recursividad_maximo, inicio, largo) shared(output, memblock)
+	output.resize(2);
+
+	#pragma omp parallel num_threads(2) firstprivate(nivel_actual, nivel_recursividad_maximo, memblock, inicio, largo) shared(output)
 	{
 		// Guardo mi ID del nivel, puede ser 0 o 1
 		int mytid = omp_get_thread_num();
 		// Dentro del pragma entramos a un nuevo nivel de paralelismo
 		nivel_actual++;
 		// Se divide en dos el largo
-		largo /= 2;
+		largo = largo/2;
 		// Se asigna el nuevo inicio del arreglo
 		inicio += largo * mytid;
 
@@ -332,16 +367,14 @@ cout << "Soy " << omp_get_thread_num() << " del nivel " << nivel_actual << "/" <
 			// Número de veces que se cargaran 16 flotantes y que se ejecutará
 			// toda la secuencia SIMD completa
 			int veces = largo/16;
-cout << "Soy " << omp_get_thread_num() << " del último nivel con estas hermanas: " << omp_get_num_threads() << endl;
-cout << omp_get_thread_num() << ")" << "creando arreglos" << endl;
+
 			/* Declaración de registros */
 			// Se usan de a cuatro registros alineados a 16 bytes
 			float a[4] __attribute__((aligned(16)));
 			float b[4] __attribute__((aligned(16)));
 			float c[4] __attribute__((aligned(16)));
 			float d[4] __attribute__((aligned(16)));
-cout << omp_get_thread_num() << ")" << "arreglos creados" << endl;
-cout << omp_get_thread_num() << ")" << "datos para empezar el ciclo:" << "veces:" << veces << " inicio:" << inicio << endl;
+
 			/* Ordenamiento */
 			// Se realiza según las veces correspondientes al largo
 			for (int i = 0; i < veces; i++)
@@ -356,24 +389,23 @@ cout << omp_get_thread_num() << ")" << "datos para empezar el ciclo:" << "veces:
 					c[j] = memblock[inicio + j+8 + i*(16)];
 					d[j] = memblock[inicio + j+12 + i*(16)];
 				}
-
 				/* Ordenamiento SIMD */
 				// Se ejecuta el ordenamiento en los registros
 				SIMD_Part(a, b, c, d);
-
 				// Se añade el resultado ordenado al vector de secuencias
 				// float 16 pasa todos los registros a un único vector
 				secuencias.push_back(float16(a, b, c, d));
 			}
 
 			/* MultiWay Merge Sort	*/
-			// Hace un merge de todos los vectores de 16 ordenados
-			output[mytid] = mwms(secuencias);
-		}		
+			// Hace un merge de todos los vectores de 16 ordenados			
+			output[mytid] = mwms(secuencias);			
+		}
 	}
 
 	// Hago Merge two-way para pasar ambas listas del output a una sola
-	mergedOutput = mwms(output);
+	mergedOutput = mergeTW(output[0],output[1]);
+	
 	return mergedOutput;
 }
 
