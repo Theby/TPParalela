@@ -1,4 +1,4 @@
-FLAGS = -std=c++11 -Wall -msse4 -O2 -fopenmp
+FLAGS = -std=c++0x -msse4 -Wall -O2 -fopenmp
 DEPS = minHeap.hpp
 OBJ = minHeap.o simsort.o
 

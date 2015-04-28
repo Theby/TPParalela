@@ -4,10 +4,7 @@
  * USACH - Ramo: Taller de Programación Paralela
  ***********************************************/
 
-#include <math.h>
-#include <vector>
 #include <iostream>
-#include <smmintrin.h>
 #include <fstream>
 #include <ostream>
 #include <unistd.h>
@@ -15,9 +12,7 @@
 #include <string>
 #include <algorithm>
 #include <iterator>
-#include <functional>
 #include <stdlib.h>
-#include <cassert>
 #include "minHeap.hpp"
 
 #ifdef _OPENMP
@@ -259,14 +254,14 @@ void SIMD_Part(float* a, float* b, float* c, float* d){
 // de minHeap
 vector<float> mwms(vector<vector<float>> secuencias){
 	vector<float> output;
-	std::tuple<float, float> elemento;
+	std::tuple<float, int> elemento;
 	MinHeap minHeap;
 	int num_lista;
 	
 	// Recorre todas las listas para sacar los primeros elementos
 	// eliminandolo de su arreglo original
 	for (unsigned int j = 0; j < secuencias.size(); j++){
-		minHeap.Insert(std::make_tuple(secuencias[j][0], j));
+		minHeap.Insert(std::make_tuple(secuencias[j][0], (int)j));
 		// Borra el elemento de la lista original
 		secuencias[j].erase(secuencias[j].begin());	
 	}
@@ -612,7 +607,7 @@ int main(int argc, char *argv[])
 	}
 
 	omp_set_dynamic(0);
-    omp_set_nested(1);
+	omp_set_nested(1);
 
 	output = arbolDeHebras(0,nivel_recursividad, memblock, 0, largo);
 
