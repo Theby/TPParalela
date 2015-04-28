@@ -6,13 +6,9 @@
 
 #include <iostream>
 #include <fstream>
-#include <ostream>
 #include <unistd.h>
 #include <fcntl.h>
-#include <string>
 #include <algorithm>
-#include <iterator>
-#include <stdlib.h>
 #include "minHeap.hpp"
 
 #ifdef _OPENMP
