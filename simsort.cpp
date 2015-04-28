@@ -16,7 +16,8 @@
 #include <algorithm>
 #include <iterator>
 #include <functional>
-#include <stdlib.h> 
+#include <stdlib.h>
+#include <cassert>
 #include "minHeap.hpp"
 
 #ifdef _OPENMP
@@ -342,7 +343,7 @@ vector<float> arbolDeHebras(int nivel_actual,
 	vector<float> mergedOutput;
 	output.resize(2);
 
-	#pragma omp parallel num_threads(2) firstprivate(nivel_actual, nivel_recursividad_maximo, memblock, inicio, largo) shared(output)
+	#pragma omp parallel num_threads(2) firstprivate(nivel_actual, nivel_recursividad_maximo, inicio, largo) shared(output, memblock)
 	{
 		// Guardo mi ID del nivel, puede ser 0 o 1
 		int mytid = omp_get_thread_num();
@@ -405,7 +406,7 @@ vector<float> arbolDeHebras(int nivel_actual,
 
 	// Hago Merge two-way para pasar ambas listas del output a una sola
 	mergedOutput = mergeTW(output[0],output[1]);
-	
+
 	return mergedOutput;
 }
 
@@ -609,18 +610,6 @@ int main(int argc, char *argv[])
 	}else{
 		largo = num_elementos;
 	}
-
-	// Permite saber cuantas veces se hará un ordenamiento
-	// de 16 números y por tanto cuantas secuencias han sido
-	// generadas
-	//veces = largo/16;
-
-	/* Declaración de registros */
-	// Se usan de a cuatro registros alineados a 16 bytes
-	/*float a[4] __attribute__((aligned(16)));
-	float b[4] __attribute__((aligned(16)));
-	float c[4] __attribute__((aligned(16)));
-	float d[4] __attribute__((aligned(16)));*/
 
 	omp_set_dynamic(0);
     omp_set_nested(1);
