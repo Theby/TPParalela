@@ -259,7 +259,7 @@ void SIMD_Part(float* a, float* b, float* c, float* d){
 // de minHeap
 vector<float> mwms(vector<vector<float>> secuencias){
 	vector<float> output;
-	std::tuple<float, float> elemento;
+	std::tuple<float, int> elemento;
 	MinHeap minHeap;
 	int num_lista;
 	
