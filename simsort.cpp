@@ -21,16 +21,10 @@ using namespace std;
 /* HELPERS */
 
 // Permite tener dos tipos de blendv según la compatibilidad del procesador
-__m128 _mm_blendv_ps_allcpu(__m128 R1, __m128 R2, __m128 comparador){
-	// Si el procesador soporta sse4.1
-	#ifdef __SSE4_1__
-	    return _mm_blendv_ps(R1, R2, comparador);
-	#else
-	    // si el procesador no soporta sse4.1
-	    __m128 mask1 = _mm_andnot_ps(comparador, R1);
-	    __m128 mask2 = _mm_and_ps(comparador, R2);
-	    return _mm_or_ps(mask1, mask2);  
-	#endif
+__m128 _mm_blendv_ps_allcpu(__m128 R1, __m128 R2, __m128 comparador){	
+    __m128 mask1 = _mm_andnot_ps(comparador, R1);
+    __m128 mask2 = _mm_and_ps(comparador, R2);
+    return _mm_or_ps(mask1, mask2);  	
 }
 
 // Intercambia los valores intermedios del arreglo
