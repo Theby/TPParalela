@@ -345,20 +345,32 @@ vector<float> arbolDeHebras(int nivel_actual,
 							int largo
 							)
 {
+	int threads_por_nivel = 2;
 	vector<vector<float>> output;
 	vector<float> mergedOutput;
-	output.resize(2);
+	output.resize(threads_por_nivel);
 
-	#pragma omp parallel num_threads(2) firstprivate(nivel_actual, nivel_recursividad_maximo, inicio, largo) shared(output, memblock)
+	// Si se usa una sola hebra
+	if(nivel_recursividad_maximo == 0)
+		threads_por_nivel = 0;
+
+	#pragma omp parallel num_threads(threads_por_nivel) firstprivate(nivel_actual, nivel_recursividad_maximo, inicio, largo) shared(output, memblock)
 	{
-		// Guardo mi ID del nivel, puede ser 0 o 1
-		int mytid = omp_get_thread_num();
-		// Dentro del pragma entramos a un nuevo nivel de paralelismo
-		nivel_actual++;
-		// Se divide en dos el largo
-		largo = largo/2;
-		// Se asigna el nuevo inicio del arreglo
-		inicio += largo * mytid;
+		int mytid = 0;
+		// Si se usa más de una hebra
+		if(nivel_recursividad_maximo != 0){
+			// Se divide en dos el largo
+			largo = largo/threads_por_nivel;
+
+			// Guardo mi ID del nivel, puede ser 0 o 1
+			mytid = omp_get_thread_num();
+
+			// Dentro del pragma entramos a un nuevo nivel de paralelismo
+			nivel_actual++;
+
+			// Se asigna el nuevo inicio del arreglo
+			inicio += largo * mytid;
+		}
 
 		// Reviso si he llegado al nivel de recursividad más bajo
 		if(nivel_actual != nivel_recursividad_maximo){
@@ -410,7 +422,11 @@ vector<float> arbolDeHebras(int nivel_actual,
 		}
 	}
 
-	// Hago Merge two-way para pasar ambas listas del output a una sola
+	// Si se usa solo una hebra
+	if(nivel_recursividad_maximo == 0)
+		return output[0];
+
+	// Hago Merge two-way para pasar ambas listas del output a una sola	
 	mergedOutput = mergeTW(output[0],output[1]);
 
 	return mergedOutput;
@@ -553,9 +569,9 @@ int main(int argc, char *argv[])
 				}
 			}else if(command_L.compare(argv[i]) == 0){
 				nivel_recursividad = atoi(argv[i+1]);
-				if(nivel_recursividad <= 0){
+				if(nivel_recursividad < 0){
 					cout << endl;
-					cout << "El parametro '-L' debe ser mayor o igual a 1." << endl;
+					cout << "El parametro '-L' debe ser mayor o igual a 0." << endl;
 					cout << "Para más ayuda use '-help'" << endl;
 					cout << endl;
 					return -1;
@@ -617,9 +633,9 @@ int main(int argc, char *argv[])
 		largo = num_elementos;
 	}
 
+	/* Parte OpenMP */
 	omp_set_dynamic(0);
 	omp_set_nested(1);
-
 	output = arbolDeHebras(0,nivel_recursividad, memblock, 0, largo);
 
 	/* Output y Write output */
