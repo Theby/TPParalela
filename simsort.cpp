@@ -4,6 +4,7 @@
  * USACH - Ramo: Taller de Programación Paralela
  ***********************************************/
 
+#include <smmintrin.h>
 #include <iostream>
 #include <fstream>
 #include <unistd.h>
@@ -18,6 +19,20 @@
 using namespace std;
 
 /* HELPERS */
+
+// Permite tener dos tipos de blendv según la compatibilidad del procesador
+__m128 _mm_blendv_ps_allcpu(__m128 R1, __m128 R2, __m128 comparador){
+	// Si el procesador soporta sse4.1
+	#ifdef __SSE4_1__
+	    return _mm_blendv_ps(R1, R2, comparador);
+	#else
+	    // si el procesador no soporta sse4.1
+	    __m128 mask1 = _mm_andnot_ps(comparador, R1);
+	    __m128 mask2 = _mm_and_ps(comparador, R2);
+	    return _mm_or_ps(mask1, mask2);  
+	#endif
+}
+
 // Intercambia los valores intermedios del arreglo
 __m128 swapMiddle(__m128 R){
 	return _mm_shuffle_ps(R, R, _MM_SHUFFLE(3, 1, 2, 0));
@@ -58,9 +73,9 @@ void compara2R(__m128& R1, __m128 &R2){
 	// Compara el primer registro con el segundo
 	comp = _mm_cmplt_ps(R1, R2);
 	// Obtiene el menor
-	aux1 = _mm_blendv_ps(R2, R1, comp);
+	aux1 = _mm_blendv_ps_allcpu(R2, R1, comp);
 	// Obtiene el mayor
-	aux2 = _mm_blendv_ps(R1, R2, comp);
+	aux2 = _mm_blendv_ps_allcpu(R1, R2, comp);
 
 	R1 = aux1;
 	R2 = aux2;
@@ -181,9 +196,9 @@ void mergeSIMD(__m128& Af, __m128& Bf, __m128& Cf, __m128& Df){
 	// Compara los dos arreglos restantes para obtener el menor y el mayor
 	comp = _mm_cmplt_ps(primeroRepetido(Bf), primeroRepetido(Df));
 	// Obtiene el menor
-	O2_menor = _mm_blendv_ps(Df, Bf, comp);
+	O2_menor = _mm_blendv_ps_allcpu(Df, Bf, comp);
 	// Obtiene el mayor
-	O2_mayor = _mm_blendv_ps(Bf, Df, comp);	
+	O2_mayor = _mm_blendv_ps_allcpu(Bf, Df, comp);	
 
 	O2 = invertir(Cf);
 	BMN(O1, O2);
