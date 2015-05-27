@@ -1,13 +1,13 @@
-FLAGS = -std=c++0x -msse3 -Wall -O2 -fopenmp
-DEPS = minHeap.hpp
-OBJ = minHeap.o simsort.o
+FLAGS = -Wall -O2
+DEPS = 
+OBJ = hotpotato.o
 
 %.o: %.cpp $(DEPS)
-	g++ $(FLAGS) -c -o $@ $<
+	mpic++ $(FLAGS) -c -o $@ $<
 
-simsort: $(OBJ)
-	g++ $(FLAGS) -o $@ $^
+hotpotato: $(OBJ)
+	mpic++ $(FLAGS) -o $@ $^
 
 clean:
-	rm -f Simsort *.o
+	rm -f Hotpotato *.o
 .PHONY: all clean
