@@ -55,6 +55,8 @@ int main (int argc , char * argv [])
 {
 	int my_rank, world_size;
 	int token, initial_token;
+	bool jugando = true;
+	int index = 1;
 
 	const string command_help = "-h";
 	const string command_t = "-t";
@@ -134,27 +136,93 @@ int main (int argc , char * argv [])
 		);
  	}
 
+ 	// Da la semilla al rand
 	srand(time(NULL));
 
  	// Comienza el juego
  	while(true){
-		// Recibo del izquierdo
-	    COMM_WORLD.Recv(&token, 		// Información a recibir
-	    			  		 1, 		// Tamaño de la info
-	    			   MPI_INT, 		// Tipo de info
-	    		 vecino[0] - 1,    	  	// De quién se espera recibir la info
-	    			         0       	// Tag usado para identificar la info
-		);
+
+ 		if (my_rank == 1 && jugadores[index] != my_rank)
+ 		{
+ 			int status = 0;
+ 			bool existsGanador = false;
+
+ 			while(true){
+
+				// Recibo el valor de la papa desde el siguiente nodo
+			    COMM_WORLD.Recv(&status, 		// Información a recibir
+			    			  		  1, 		// Tamaño de la info
+			    			    MPI_INT, 		// Tipo de info
+			       jugadores[index] - 1,    	// De quién se espera recibir la info
+			    		 	          1       	// Tag usado para identificar la info
+				);
+
+				if (status == initial_token + 1){
+					existsGanador = true;
+					break;
+				}else if (status >= 0){
+					cout << "Proceso " << jugadores[index] - 1 << " tiene la papa con valor " << status << endl;
+
+					if (jugadores[index] == vecino[0])
+					{
+						break;
+					}
+				}else if(status < 0){
+					cout << "Proceso " << jugadores[index] - 1 << " tiene la papa con valor " << status << " (Proceso " << jugadores[index] - 1 << " sale del juego)" << endl;
+					if(jugando){
+						index = (index + 1) % (jugadores.size() - 1);
+						break;
+					}else{
+						int pos = std::find(jugadores.begin(), jugadores.end(), jugadores[index]) - jugadores.begin();
+						jugadores.erase(jugadores.begin()+pos);
+						index = (index + 1) % jugadores.size();
+					}
+				}			
+
+				index = (index + 1) % jugadores.size();
+			}
+
+			if(existsGanador){			
+				cout << "Proceso " << jugadores[index] - 1 << " es el ganador" << endl;
+				break;
+			}
+ 		}
+
+ 		if(jugando){
+
+			// Recibo del izquierdo
+		    COMM_WORLD.Recv(&token, 		// Información a recibir
+		    			  		 1, 		// Tamaño de la info
+		    			   MPI_INT, 		// Tipo de info
+		    		 vecino[0] - 1,    	  	// De quién se espera recibir la info
+		    			         0       	// Tag usado para identificar la info
+			);
+		}
 
 	    // Si el valor recibido es positivo entonces se ha recibido una papa
 	    // Si no, se ha recibido un rank de un nodo que ha perdido
-	    if(token >= 0){
+	    if(token >= 0 && jugando){
 		    token = token - ((rand() % initial_token) + 1);
+
+		    if(my_rank != 1){
+			    // Se envía el status al rank 0
+			 	COMM_WORLD.Send(&token, 		// Información a enviar 
+			 	       	             1, 		// Tamaño de la info
+			 	       		   MPI_INT, 		// Tipo de info
+			 	       	 			 0,    	  	// A quién se envía la info
+			 	       	             1      	// Tag usado para identificar la info
+				);
+			 }
 
 		    // Si es mayor que 0 sigo en juego
 		    // si no, he perdido
 		    if(token >= 0){
-		    	cout << "Proceso " << my_rank - 1 << " tiene la papa con valor " << token << endl;		    
+
+		    	if (my_rank == 1)
+				{
+					cout << "Proceso " << my_rank - 1 << " tiene la papa con valor " << token << endl;
+					index = 1;
+				}
 
 			 	// Se envía al derecho
 			 	COMM_WORLD.Send(&token, 		// Información a enviar 
@@ -165,7 +233,6 @@ int main (int argc , char * argv [])
 				);
 
 			}else{
-				cout << "Proceso " << my_rank - 1 << " tiene la papa con valor " << token << " (Proceso " << my_rank - 1 << " sale del juego)" << endl;
 
 				// Vuelve negativo el rank para enviarlo al vecino y que se trasmita el mensaje uno a uno
 				my_rank *= -1;
@@ -178,9 +245,21 @@ int main (int argc , char * argv [])
 			 	       	               0      	// Tag usado para identificar la info
 				);
 
-				break;
+			 	my_rank *= -1;
+
+			 	if(my_rank != 1){
+					break;
+				}else{
+					cout << "Proceso " << my_rank - 1 << " tiene la papa con valor " << token << " (Proceso " << my_rank - 1 << " sale del juego)" << endl;
+					jugando = false;
+					vecino[0] = 0;
+					vecino[1] = 0;
+					int pos = std::find(jugadores.begin(), jugadores.end(), my_rank) - jugadores.begin();
+					jugadores.erase(jugadores.begin()+pos);
+					index = 2 % jugadores.size();
+				}
 			}
-		}else{
+		}else if(jugando){
 			// Se vuelve positivo el valor obtenido para obtener el rank recibido
 			token *= -1;
 
@@ -216,7 +295,19 @@ int main (int argc , char * argv [])
 
 			// Verifica si soy el único que queda en juego
 			if(jugadores.size() == 1){
-				cout << "Proceso " << my_rank - 1 << " es el ganador" << endl;
+			    if(my_rank != 1){
+			    	token = initial_token + 1;
+
+				    // Se envía que gané
+				 	COMM_WORLD.Send(&token, 		// Información a enviar 
+				 	       	             1, 		// Tamaño de la info
+				 	       		   MPI_INT, 		// Tipo de info
+				 	       	 			 0,    	  	// A quién se envía la info
+				 	       	             1      	// Tag usado para identificar la info
+					);
+				 }else{
+					cout << "Proceso " << my_rank - 1 << " es el ganador" << endl;
+				}
 
 				break;
 			}
@@ -236,6 +327,9 @@ int main (int argc , char * argv [])
 
 			// Verifica si soy el que debe comenzar la siguiente ronda
 			if(starter){
+				if(my_rank == 1){
+					index = 1;
+				}
 
 				token = initial_token;
 
