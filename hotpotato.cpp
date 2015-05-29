@@ -116,6 +116,14 @@ int main (int argc , char * argv [])
 	my_rank = COMM_WORLD.Get_rank() + 1;
  	world_size = COMM_WORLD.Get_size();
 
+ 	if(world_size == 1){
+ 		cout << "Debe ejecutar con al menos dos procesos" << endl;
+
+ 		Finalize();
+
+ 		return 0;
+ 	}
+
  	// Cada proceso guarda el valor de su vecino derecho e izquierdo
  	vector<int> vecino = getVecinos(my_rank, world_size);
 
