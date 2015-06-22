@@ -136,7 +136,7 @@ void uMain::main(){
 		Productor *productor = new Productor(inputBuffer, inputFile);
 		for (int i = 0; i < numero_tareas; i++)
 		{
-			reconocedores[i] = new Reconocedor(inputBuffer, outputBuffer, i);			
+			reconocedores[i] = new Reconocedor(inputBuffer, outputBuffer);			
 		}
 		Escritor *escritor = new Escritor(outputBuffer, outputFile);
 

@@ -14,11 +14,10 @@
 _Task Reconocedor {
 	InputBuffer &inputBuffer;
 	OutputBuffer &outputBuffer;
-	int id;
 
 	public:
-		Reconocedor( InputBuffer &buf1, OutputBuffer &buf2, int num )
-		 : inputBuffer( buf1 ), outputBuffer( buf2 ), id(num) { }
+		Reconocedor( InputBuffer &buf1, OutputBuffer &buf2 )
+		 : inputBuffer( buf1 ), outputBuffer( buf2 ) { }
 	private:
 		void main();
 };
