@@ -1,13 +1,13 @@
-FLAGS = -Wall -O2
-DEPS = 
-OBJ = hotpotato.o
+FLAGS = -Wall -O2 -std=c++11 -multi
+DEPS = inputBuffer.hpp outputBuffer.hpp productor.hpp reconocedor.hpp escritor.hpp 
+OBJ = inputBuffer.o outputBuffer.o productor.o reconocedor.o escritor.o exp.o
 
 %.o: %.cpp $(DEPS)
-	mpic++ $(FLAGS) -c -o $@ $<
+	u++ $(FLAGS) -c -o $@ $<
 
-hotpotato: $(OBJ)
-	mpic++ $(FLAGS) -o $@ $^
+exp: $(OBJ)
+	u++ $(FLAGS) -o $@ $^
 
 clean:
-	rm -f Hotpotato *.o
+	rm -f exp *.o
 .PHONY: all clean
